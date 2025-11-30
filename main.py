@@ -1,12 +1,13 @@
 import os
 import logging
 import sqlite3
+import threading
 from flask import Flask
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 from deep_translator import GoogleTranslator
 
 # Telegram bot token
-TOKEN = os.environ.get("8318611647:AAEqRT_USD6tBDpmfYCVCQtV4bdpUjRa6Bw") or "8318611647:AAEqRT_USD6tBDpmfYCVCQtV4bdpUjRa6Bw"
+TOKEN = os.environ.get("TOKEN") or "8318611647:AAEqRT_USD6tBDpmfYCVCQtV4bdpUjRa6Bw"
 
 # Logging
 logging.basicConfig(
@@ -15,11 +16,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Default target language
 DEFAULT_TARGET_LANG = "en"
 DB_PATH = "users.db"
 
-# Flask app — Render uchun port ochish
 app = Flask(__name__)
 
 @app.route('/')
@@ -127,14 +126,15 @@ def run_bot():
     dp.add_handler(CommandHandler("lang", lang_cmd))
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, translate_message))
 
-    logger.info("Translator bot ishga tushdi.")
+    logger.info("Translator bot polling boshlanyapti...")
     updater.start_polling()
     updater.idle()
 
 if __name__ == "__main__":
-    # Flask port ochadi
+    # Botni alohida threadda ishga tushiramiz
+    bot_thread = threading.Thread(target=run_bot)
+    bot_thread.start()
+
+    # Flask serverni ishga tushiramiz
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
-
-    # Botni ishga tushiramiz
-    run_bot()
