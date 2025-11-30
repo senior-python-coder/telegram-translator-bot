@@ -1,10 +1,12 @@
+import os
 import logging
 import sqlite3
+from flask import Flask
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 from deep_translator import GoogleTranslator
 
 # Telegram bot token
-TOKEN = "8318611647:AAEqRT_USD6tBDpmfYCVCQtV4bdpUjRa6Bw"
+TOKEN = os.environ.get("8318611647:AAEqRT_USD6tBDpmfYCVCQtV4bdpUjRa6Bw") or "8318611647:AAEqRT_USD6tBDpmfYCVCQtV4bdpUjRa6Bw"
 
 # Logging
 logging.basicConfig(
@@ -15,9 +17,14 @@ logger = logging.getLogger(__name__)
 
 # Default target language
 DEFAULT_TARGET_LANG = "en"
-
-# Database setup
 DB_PATH = "users.db"
+
+# Flask app — Render uchun port ochish
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running!"
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -58,7 +65,6 @@ def translate_text(text, target_lang):
         logger.exception("Translation error")
         return f"Tarjima xatosi: {e}"
 
-# Handlers
 def start(update, context):
     chat_id = update.effective_chat.id
     set_target_lang(chat_id, DEFAULT_TARGET_LANG)
@@ -69,17 +75,11 @@ def start(update, context):
         "• /help — foydalanish bo‘yicha yo‘riqnoma\n\n"
         "Matn yuboring — men uni tanlangan tilga tarjima qilaman.\n"
         f"Hozirgi maqsad tili: {get_target_lang(chat_id)}\n\n"
-        
-        
-        
-        
-        
-        
-        "Hello! I am a translation bot. \n \n" 
-         "Commands:\n"
+        "Hello! I am a translation bot.\n\n"
+        "Commands:\n"
         "• /lang <code> — set the target language (for example: /lang uz, /lang en, /lang ru)\n"
-        "• /help — instructions on how to usen\n\n"
-        "Send text — I will translate it into the selected language. \n"
+        "• /help — instructions on how to use\n\n"
+        "Send text — I will translate it into the selected language.\n"
         f"Current target language: {get_target_lang(chat_id)}"
     )
     update.message.reply_text(msg)
@@ -91,12 +91,9 @@ def help_cmd(update, context):
         "1) /lang <kod> — maqsad tilini o‘rnating (en, uz, ru, tr, de, fr ...)\n"
         "2) Oddiy matn yuboring — bot uni tanlangan tilga tarjima qiladi.\n\n"
         f"Hozirgi maqsad tili: {get_target_lang(chat_id)}\n\n"
-        
-        
-        
-        "How to use: \n"
-        "1) /lang <kod> - set the goal languange (en, ru, de, fr, uz ...)\n"
-        "2) Sen the normal TEXT - The bot translates it into the selected language. \n\n"
+        "How to use:\n"
+        "1) /lang <code> — set the target language (en, ru, de, fr, uz ...)\n"
+        "2) Send normal text — bot will translate it.\n\n"
         f"Current target language: {get_target_lang(chat_id)}"
     )
     update.message.reply_text(msg)
@@ -120,7 +117,7 @@ def translate_message(update, context):
     translated = translate_text(text, target_lang)
     update.message.reply_text(translated)
 
-def main():
+def run_bot():
     init_db()
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
@@ -135,4 +132,9 @@ def main():
     updater.idle()
 
 if __name__ == "__main__":
-    main()
+    # Flask port ochadi
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
+
+    # Botni ishga tushiramiz
+    run_bot()
