@@ -4,7 +4,7 @@ from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 from deep_translator import GoogleTranslator
 
 # Telegram bot token
-TOKEN = "8344960977:AAGYIO9sLXLWp9Syt0VriHmU7XVOUidr_x8"
+TOKEN = "8318611647:AAEqRT_USD6tBDpmfYCVCQtV4bdpUjRa6Bw"
 
 # Logging
 logging.basicConfig(
