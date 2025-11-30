@@ -4,7 +4,7 @@ from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 from deep_translator import GoogleTranslator
 
 # Telegram bot token
-TOKEN = "8318611647:AAEqRT_USD6tBDpmfYCVCQtV4bdpUjRa6Bw"
+TOKEN = "8344960977:AAGYIO9sLXLWp9Syt0VriHmU7XVOUidr_x8"
 
 # Logging
 logging.basicConfig(
@@ -68,7 +68,19 @@ def start(update, context):
         "• /lang <kod> — maqsad tilini o‘rnatish (masalan: /lang uz, /lang en, /lang ru)\n"
         "• /help — foydalanish bo‘yicha yo‘riqnoma\n\n"
         "Matn yuboring — men uni tanlangan tilga tarjima qilaman.\n"
-        f"Hozirgi maqsad tili: {get_target_lang(chat_id)}"
+        f"Hozirgi maqsad tili: {get_target_lang(chat_id)}\n\n"
+        
+        
+        
+        
+        
+        
+        "Hello! I am a translation bot. \n \n" 
+         "Commands:\n"
+        "• /lang <code> — set the target language (for example: /lang uz, /lang en, /lang ru)\n"
+        "• /help — instructions on how to usen\n\n"
+        "Send text — I will translate it into the selected language. \n"
+        f"Current target language: {get_target_lang(chat_id)}"
     )
     update.message.reply_text(msg)
 
@@ -78,7 +90,14 @@ def help_cmd(update, context):
         "Foydalanish:\n"
         "1) /lang <kod> — maqsad tilini o‘rnating (en, uz, ru, tr, de, fr ...)\n"
         "2) Oddiy matn yuboring — bot uni tanlangan tilga tarjima qiladi.\n\n"
-        f"Hozirgi maqsad tili: {get_target_lang(chat_id)}"
+        f"Hozirgi maqsad tili: {get_target_lang(chat_id)}\n\n"
+        
+        
+        
+        "How to use: \n"
+        "1) /lang <kod> - set the goal languange (en, ru, de, fr, uz ...)\n"
+        "2) Sen the normal TEXT - The bot translates it into the selected language. \n\n"
+        f"Current target language: {get_target_lang(chat_id)}"
     )
     update.message.reply_text(msg)
 
