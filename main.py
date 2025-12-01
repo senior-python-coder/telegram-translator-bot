@@ -3,11 +3,12 @@ import logging
 import sqlite3
 import threading
 from flask import Flask
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackQueryHandler
 from deep_translator import GoogleTranslator
 
 # Telegram bot token
-TOKEN = os.environ.get("TOKEN") or "8318611647:AAEqRT_USD6tBDpmfYCVCQtV4bdpUjRa6Bw"
+TOKEN = os.environ.get("8318611647:AAEqRT_USD6tBDpmfYCVCQtV4bdpUjRa6Bw") or "8318611647:AAEqRT_USD6tBDpmfYCVCQtV4bdpUjRa6Bw"
 
 # Logging
 logging.basicConfig(
@@ -64,24 +65,24 @@ def translate_text(text, target_lang):
         logger.exception("Translation error")
         return f"Tarjima xatosi: {e}"
 
+# --- Inline tugmalar bilan start ---
 def start(update, context):
     chat_id = update.effective_chat.id
     set_target_lang(chat_id, DEFAULT_TARGET_LANG)
+
+    keyboard = [
+        [InlineKeyboardButton("🇺🇿 Uzbek", callback_data="lang:uz"),
+         InlineKeyboardButton("🇬🇧 English", callback_data="lang:en"),
+         InlineKeyboardButton("🇷🇺 Russian", callback_data="lang:ru")],
+        [InlineKeyboardButton("❓ Help", callback_data="help")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
     msg = (
-        "Salom! Men tarjimon botman.\n\n"
-        "Buyruqlar:\n"
-        "• /lang <kod> — maqsad tilini o‘rnatish (masalan: /lang uz, /lang en, /lang ru)\n"
-        "• /help — foydalanish bo‘yicha yo‘riqnoma\n\n"
-        "Matn yuboring — men uni tanlangan tilga tarjima qilaman.\n"
-        f"Hozirgi maqsad tili: {get_target_lang(chat_id)}\n\n"
-        "Hello! I am a translation bot.\n\n"
-        "Commands:\n"
-        "• /lang <code> — set the target language (for example: /lang uz, /lang en, /lang ru)\n"
-        "• /help — instructions on how to use\n\n"
-        "Send text — I will translate it into the selected language.\n"
-        f"Current target language: {get_target_lang(chat_id)}"
+        "Salom! Men tarjimon botman.\nTilni tanlash uchun tugmalardan foydalaning.\n"
+        f"Hozirgi maqsad tili: {get_target_lang(chat_id)}"
     )
-    update.message.reply_text(msg)
+    update.message.reply_text(msg, reply_markup=reply_markup)
 
 def help_cmd(update, context):
     chat_id = update.effective_chat.id
@@ -89,11 +90,7 @@ def help_cmd(update, context):
         "Foydalanish:\n"
         "1) /lang <kod> — maqsad tilini o‘rnating (en, uz, ru, tr, de, fr ...)\n"
         "2) Oddiy matn yuboring — bot uni tanlangan tilga tarjima qiladi.\n\n"
-        f"Hozirgi maqsad tili: {get_target_lang(chat_id)}\n\n"
-        "How to use:\n"
-        "1) /lang <code> — set the target language (en, ru, de, fr, uz ...)\n"
-        "2) Send normal text — bot will translate it.\n\n"
-        f"Current target language: {get_target_lang(chat_id)}"
+        f"Hozirgi maqsad tili: {get_target_lang(chat_id)}"
     )
     update.message.reply_text(msg)
 
@@ -114,7 +111,34 @@ def translate_message(update, context):
     target_lang = get_target_lang(chat_id)
     text = update.message.text
     translated = translate_text(text, target_lang)
-    update.message.reply_text(translated)
+
+    # Inline tugma bilan "Nusxa olish"
+    keyboard = [[InlineKeyboardButton("📋 Nusxa olish", callback_data=f"copy:{translated}")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    update.message.reply_text(translated, reply_markup=reply_markup)
+
+def button_handler(update, context):
+    query = update.callback_query
+    chat_id = query.message.chat_id
+    data = query.data
+
+    if data.startswith("lang:"):
+        lang_code = data.split(":")[1]
+        set_target_lang(chat_id, lang_code)
+        query.answer(f"Til o‘zgartirildi: {lang_code}")
+        query.edit_message_text(f"Maqsad tili o‘rnatildi: {lang_code}")
+    elif data == "help":
+        query.answer("Yordam")
+        query.edit_message_text(
+            "Foydalanish:\n"
+            "1) /lang <kod> — maqsad tilini o‘rnating (en, uz, ru, tr, de, fr ...)\n"
+            "2) Oddiy matn yuboring — bot uni tanlangan tilga tarjima qiladi."
+        )
+    elif data.startswith("copy:"):
+        copied_text = data.split("copy:")[1]
+        query.answer("Matn nusxalandi!")
+        query.message.reply_text(f"📋 Nusxa: {copied_text}")
 
 def run_bot():
     init_db()
@@ -125,16 +149,15 @@ def run_bot():
     dp.add_handler(CommandHandler("help", help_cmd))
     dp.add_handler(CommandHandler("lang", lang_cmd))
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, translate_message))
+    dp.add_handler(CallbackQueryHandler(button_handler))
 
     logger.info("Translator bot polling boshlanyapti...")
     updater.start_polling()
     updater.idle()
 
 if __name__ == "__main__":
-    # Botni alohida threadda ishga tushiramiz
     bot_thread = threading.Thread(target=run_bot)
     bot_thread.start()
 
-    # Flask serverni ishga tushiramiz
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
