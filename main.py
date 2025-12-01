@@ -7,10 +7,8 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackQueryHandler
 from deep_translator import GoogleTranslator
 
-# Telegram bot token
 TOKEN = os.environ.get("8318611647:AAEqRT_USD6tBDpmfYCVCQtV4bdpUjRa6Bw") or "8318611647:AAEqRT_USD6tBDpmfYCVCQtV4bdpUjRa6Bw"
 
-# Logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
@@ -23,7 +21,6 @@ DEFAULT_TARGET_LANG = "en"
 
 app = Flask(__name__)
 
-# --- Soxta HTTP route (Render health check uchun) ---
 @app.route('/')
 def home():
     return "✅ Bot is running on Render!"
@@ -71,20 +68,42 @@ def set_user(chat_id, src, tgt, page):
     conn.commit()
     conn.close()
 
-# --- Barcha tillarni olish (to‘g‘ri usul) ---
+# --- Barcha tillarni olish ---
 translator = GoogleTranslator(source="auto", target="en")
 LANGS = translator.get_supported_languages(as_dict=True)
 LANG_ITEMS = list(LANGS.items())  # [('english','en'), ('uzbek','uz'), ...]
 
-PAGE_SIZE = 6  # har sahifada 6 til
+# Bayroqlar mashhur tillar uchun
+FLAGS = {
+    "ru": "🇷🇺 Russian",
+    "uz": "🇺🇿 Uzbek",
+    "en": "🇬🇧 English",
+    "ar": "🇸🇦 Arabic",
+    "tr": "🇹🇷 Turkish",
+    "de": "🇩🇪 German",
+    "fr": "🇫🇷 French",
+    "es": "🇪🇸 Spanish",
+    "it": "🇮🇹 Italian",
+    "zh-cn": "🇨🇳 Chinese",
+    "ja": "🇯🇵 Japanese",
+    "ko": "🇰🇷 Korean",
+    "hi": "🇮🇳 Hindi"
+}
+
+PAGE_SIZE = 8  # har sahifada 8 til
 
 def build_keyboard(page, mode="src"):
     start = page * PAGE_SIZE
     end = start + PAGE_SIZE
     slice_items = LANG_ITEMS[start:end]
 
-    buttons = [[InlineKeyboardButton(f"{name.title()} ({code})", callback_data=f"{mode}:{code}")]
-               for name, code in slice_items]
+    buttons = []
+    for name, code in slice_items:
+        if code in FLAGS:
+            label = FLAGS[code]
+        else:
+            label = f"{name.title()} ({code})"
+        buttons.append([InlineKeyboardButton(label, callback_data=f"{mode}:{code}")])
 
     nav = []
     if page > 0:
@@ -103,8 +122,9 @@ def start(update, context):
     set_user(chat_id, user["src"], user["tgt"], 0)
 
     msg = (
-        "Salom! Men tarjimon botman.\nTilni tanlash uchun tugmalardan foydalaning.\n\n"
-        "Hello! I am a translation bot.\nUse the buttons below to set source and target languages.\n\n"
+        "🌍 Translator Bot\n\n"
+        "Tilni tanlash uchun tugmalardan foydalaning.\n"
+        "Use the buttons below to set source and target languages.\n\n"
         f"Source: {user['src']} | Target: {user['tgt']}"
     )
     update.message.reply_text(msg, reply_markup=build_keyboard(user["page"], "src"))
