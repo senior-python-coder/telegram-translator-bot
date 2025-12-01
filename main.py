@@ -17,8 +17,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DEFAULT_TARGET_LANG = "en"
 DB_PATH = "users.db"
+DEFAULT_SOURCE_LANG = "auto"
+DEFAULT_TARGET_LANG = "en"
 
 app = Flask(__name__)
 
@@ -26,94 +27,94 @@ app = Flask(__name__)
 def home():
     return "Bot is running!"
 
+# --- DB ---
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             chat_id INTEGER PRIMARY KEY,
-            lang_code TEXT NOT NULL
+            source_lang TEXT NOT NULL,
+            target_lang TEXT NOT NULL,
+            page INTEGER DEFAULT 0
         )
     """)
     conn.commit()
     conn.close()
 
-def get_target_lang(chat_id):
+def get_user(chat_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT lang_code FROM users WHERE chat_id = ?", (chat_id,))
+    cursor.execute("SELECT source_lang, target_lang, page FROM users WHERE chat_id = ?", (chat_id,))
     result = cursor.fetchone()
     conn.close()
-    return result[0] if result else DEFAULT_TARGET_LANG
+    if result:
+        return {"src": result[0], "tgt": result[1], "page": result[2]}
+    return {"src": DEFAULT_SOURCE_LANG, "tgt": DEFAULT_TARGET_LANG, "page": 0}
 
-def set_target_lang(chat_id, lang_code):
+def set_user(chat_id, src, tgt, page):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO users (chat_id, lang_code)
-        VALUES (?, ?)
-        ON CONFLICT(chat_id) DO UPDATE SET lang_code=excluded.lang_code
-    """, (chat_id, lang_code))
+        INSERT INTO users (chat_id, source_lang, target_lang, page)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(chat_id) DO UPDATE SET 
+            source_lang=excluded.source_lang,
+            target_lang=excluded.target_lang,
+            page=excluded.page
+    """, (chat_id, src, tgt, page))
     conn.commit()
     conn.close()
 
-def translate_text(text, target_lang):
-    try:
-        translator = GoogleTranslator(source="auto", target=target_lang)
-        return translator.translate(text)
-    except Exception as e:
-        logger.exception("Translation error")
-        return f"Tarjima xatosi: {e}"
+# --- Barcha tillarni olish ---
+LANGS = GoogleTranslator.get_supported_languages(as_dict=True)
+LANG_ITEMS = list(LANGS.items())  # [('english','en'), ('uzbek','uz'), ...]
 
-# --- Inline tugmalar bilan start ---
+PAGE_SIZE = 6  # har sahifada 6 til
+
+def build_keyboard(page, mode="src"):
+    start = page * PAGE_SIZE
+    end = start + PAGE_SIZE
+    slice_items = LANG_ITEMS[start:end]
+
+    buttons = [[InlineKeyboardButton(f"{name.title()} ({code})", callback_data=f"{mode}:{code}")]
+               for name, code in slice_items]
+
+    nav = []
+    if page > 0:
+        nav.append(InlineKeyboardButton("⬅️ Oldingi", callback_data=f"page:{mode}:{page-1}"))
+    if end < len(LANG_ITEMS):
+        nav.append(InlineKeyboardButton("➡️ Keyingi", callback_data=f"page:{mode}:{page+1}"))
+    if nav:
+        buttons.append(nav)
+
+    return InlineKeyboardMarkup(buttons)
+
+# --- Bot logic ---
 def start(update, context):
     chat_id = update.effective_chat.id
-    set_target_lang(chat_id, DEFAULT_TARGET_LANG)
-
-    keyboard = [
-        [InlineKeyboardButton("🇺🇿 Uzbek", callback_data="lang:uz"),
-         InlineKeyboardButton("🇬🇧 English", callback_data="lang:en"),
-         InlineKeyboardButton("🇷🇺 Russian", callback_data="lang:ru")],
-        [InlineKeyboardButton("❓ Help", callback_data="help")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    user = get_user(chat_id)
+    set_user(chat_id, user["src"], user["tgt"], 0)
 
     msg = (
-        "Salom! Men tarjimon botman.\nTilni tanlash uchun tugmalardan foydalaning.\n"
-        f"Hozirgi maqsad tili: {get_target_lang(chat_id)}"
+        "Salom! Men tarjimon botman.\nTilni tanlash uchun tugmalardan foydalaning.\n\n"
+        "Hello! I am a translation bot.\nUse the buttons below to set source and target languages.\n\n"
+        f"Source: {user['src']} | Target: {user['tgt']}"
     )
-    update.message.reply_text(msg, reply_markup=reply_markup)
-
-def help_cmd(update, context):
-    chat_id = update.effective_chat.id
-    msg = (
-        "Foydalanish:\n"
-        "1) /lang <kod> — maqsad tilini o‘rnating (en, uz, ru, tr, de, fr ...)\n"
-        "2) Oddiy matn yuboring — bot uni tanlangan tilga tarjima qiladi.\n\n"
-        f"Hozirgi maqsad tili: {get_target_lang(chat_id)}"
-    )
-    update.message.reply_text(msg)
-
-def lang_cmd(update, context):
-    chat_id = update.effective_chat.id
-    if not context.args:
-        update.message.reply_text("Til kodini kiriting, masalan: /lang uz")
-        return
-    lang_code = context.args[0].lower().strip()
-    if not (2 <= len(lang_code) <= 5):
-        update.message.reply_text("Xato til kodi. Masalan: en, uz, ru, tr, de.")
-        return
-    set_target_lang(chat_id, lang_code)
-    update.message.reply_text(f"Maqsad tili o‘rnatildi: {lang_code}")
+    update.message.reply_text(msg, reply_markup=build_keyboard(user["page"], "src"))
 
 def translate_message(update, context):
     chat_id = update.effective_chat.id
-    target_lang = get_target_lang(chat_id)
+    user = get_user(chat_id)
     text = update.message.text
-    translated = translate_text(text, target_lang)
 
-    # Inline tugma bilan "Nusxa olish"
-    keyboard = [[InlineKeyboardButton("📋 Nusxa olish", callback_data=f"copy:{translated}")]]
+    try:
+        translator = GoogleTranslator(source=user["src"], target=user["tgt"])
+        translated = translator.translate(text)
+    except Exception as e:
+        translated = f"Translation error: {e}"
+
+    keyboard = [[InlineKeyboardButton("📋 Copy", callback_data=f"copy:{translated}")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     update.message.reply_text(translated, reply_markup=reply_markup)
@@ -121,24 +122,34 @@ def translate_message(update, context):
 def button_handler(update, context):
     query = update.callback_query
     chat_id = query.message.chat_id
+    user = get_user(chat_id)
     data = query.data
 
-    if data.startswith("lang:"):
-        lang_code = data.split(":")[1]
-        set_target_lang(chat_id, lang_code)
-        query.answer(f"Til o‘zgartirildi: {lang_code}")
-        query.edit_message_text(f"Maqsad tili o‘rnatildi: {lang_code}")
-    elif data == "help":
-        query.answer("Yordam")
-        query.edit_message_text(
-            "Foydalanish:\n"
-            "1) /lang <kod> — maqsad tilini o‘rnating (en, uz, ru, tr, de, fr ...)\n"
-            "2) Oddiy matn yuboring — bot uni tanlangan tilga tarjima qiladi."
-        )
+    src, tgt, page = user["src"], user["tgt"], user["page"]
+
+    if data.startswith("src:"):
+        src = data.split(":")[1]
+        set_user(chat_id, src, tgt, page)
+        query.answer(f"Source set: {src}")
+        query.edit_message_text(f"Source: {src} | Target: {tgt}", reply_markup=build_keyboard(page, "tgt"))
+
+    elif data.startswith("tgt:"):
+        tgt = data.split(":")[1]
+        set_user(chat_id, src, tgt, page)
+        query.answer(f"Target set: {tgt}")
+        query.edit_message_text(f"Source: {src} | Target: {tgt}")
+
+    elif data.startswith("page:"):
+        _, mode, new_page = data.split(":")
+        new_page = int(new_page)
+        set_user(chat_id, src, tgt, new_page)
+        query.answer("Page switched")
+        query.edit_message_reply_markup(reply_markup=build_keyboard(new_page, mode))
+
     elif data.startswith("copy:"):
         copied_text = data.split("copy:")[1]
-        query.answer("Matn nusxalandi!")
-        query.message.reply_text(f"📋 Nusxa: {copied_text}")
+        query.answer("Copied!")
+        query.message.reply_text(f"📋 Copy: {copied_text}")
 
 def run_bot():
     init_db()
@@ -146,12 +157,10 @@ def run_bot():
     dp = updater.dispatcher
 
     dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("help", help_cmd))
-    dp.add_handler(CommandHandler("lang", lang_cmd))
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, translate_message))
     dp.add_handler(CallbackQueryHandler(button_handler))
 
-    logger.info("Translator bot polling boshlanyapti...")
+    logger.info("Translator bot polling...")
     updater.start_polling()
     updater.idle()
 
