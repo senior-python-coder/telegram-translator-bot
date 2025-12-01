@@ -23,9 +23,14 @@ DEFAULT_TARGET_LANG = "en"
 
 app = Flask(__name__)
 
+# --- Soxta HTTP route (Render health check uchun) ---
 @app.route('/')
 def home():
-    return "Bot is running!"
+    return "✅ Bot is running on Render!"
+
+@app.route('/health')
+def health():
+    return "OK", 200
 
 # --- DB ---
 def init_db():
@@ -66,8 +71,9 @@ def set_user(chat_id, src, tgt, page):
     conn.commit()
     conn.close()
 
-# --- Barcha tillarni olish ---
-LANGS = GoogleTranslator.get_supported_languages(as_dict=True)
+# --- Barcha tillarni olish (to‘g‘ri usul) ---
+translator = GoogleTranslator(source="auto", target="en")
+LANGS = translator.get_supported_languages(as_dict=True)
 LANG_ITEMS = list(LANGS.items())  # [('english','en'), ('uzbek','uz'), ...]
 
 PAGE_SIZE = 6  # har sahifada 6 til
