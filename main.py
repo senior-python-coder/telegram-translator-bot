@@ -3,7 +3,7 @@ import logging
 import sqlite3
 import threading
 from flask import Flask
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackQueryHandler
 from deep_translator import GoogleTranslator
 
@@ -66,7 +66,7 @@ def set_user(chat_id, src, tgt):
     conn.commit()
     conn.close()
 
-# --- Mashhur tillar bayroqlar bilan ---
+# --- Mashhur tillar ---
 LANGS = [
     ("🇺🇿 Uzbek", "uz"),
     ("🇬🇧 English", "en"),
@@ -76,7 +76,14 @@ LANGS = [
     ("🇩🇪 German", "de"),
 ]
 
-def build_keyboard(mode="src"):
+def build_reply_keyboard(src, tgt):
+    reply_keyboard = [
+        [KeyboardButton(f"Source: {src}")],
+        [KeyboardButton(f"Target: {tgt}")]
+    ]
+    return ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True)
+
+def build_inline_keyboard(mode="src"):
     buttons = [[InlineKeyboardButton(flag, callback_data=f"{mode}:{code}")]
                for flag, code in LANGS]
     return InlineKeyboardMarkup(buttons)
@@ -89,16 +96,33 @@ def start(update, context):
 
     msg = (
         "🌍 Translator Bot\n\n"
-        "Tilni tanlash uchun tugmalardan foydalaning.\n"
-        "Use the buttons below to set source and target languages.\n\n"
+        "Reply tugmalarda hozirgi source/target tillar turadi.\n"
+        "Bosib inline tugmalardan o‘zgartirishingiz mumkin.\n\n"
         f"Source: {user['src']} | Target: {user['tgt']}"
     )
-    update.message.reply_text(msg, reply_markup=build_keyboard("src"))
+    update.message.reply_text(msg, reply_markup=build_reply_keyboard(user["src"], user["tgt"]))
+
+def lang_cmd(update, context):
+    chat_id = update.effective_chat.id
+    if not context.args:
+        update.message.reply_text("Til kodini kiriting, masalan: /lang uz")
+        return
+    lang_code = context.args[0].lower().strip()
+    user = get_user(chat_id)
+    set_user(chat_id, lang_code, user["tgt"])
+    update.message.reply_text(f"Source language set: {lang_code}", reply_markup=build_reply_keyboard(lang_code, user["tgt"]))
 
 def translate_message(update, context):
     chat_id = update.effective_chat.id
     user = get_user(chat_id)
     text = update.message.text
+
+    if text.startswith("Source:"):
+        update.message.reply_text("Source tilini tanlang:", reply_markup=build_inline_keyboard("src"))
+        return
+    elif text.startswith("Target:"):
+        update.message.reply_text("Target tilini tanlang:", reply_markup=build_inline_keyboard("tgt"))
+        return
 
     try:
         translator = GoogleTranslator(source=user["src"], target=user["tgt"])
@@ -123,13 +147,15 @@ def button_handler(update, context):
         src = data.split(":")[1]
         set_user(chat_id, src, tgt)
         query.answer(f"Source set: {src}")
-        query.edit_message_text(f"Source: {src} | Target: {tgt}", reply_markup=build_keyboard("tgt"))
+        query.edit_message_text(f"Source: {src} | Target: {tgt}")
+        query.message.reply_markup = build_reply_keyboard(src, tgt)
 
     elif data.startswith("tgt:"):
         tgt = data.split(":")[1]
         set_user(chat_id, src, tgt)
         query.answer(f"Target set: {tgt}")
         query.edit_message_text(f"Source: {src} | Target: {tgt}")
+        query.message.reply_markup = build_reply_keyboard(src, tgt)
 
     elif data.startswith("copy:"):
         copied_text = data.split("copy:")[1]
@@ -142,6 +168,7 @@ def run_bot():
     dp = updater.dispatcher
 
     dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("lang", lang_cmd))
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, translate_message))
     dp.add_handler(CallbackQueryHandler(button_handler))
 
