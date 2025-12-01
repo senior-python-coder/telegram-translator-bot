@@ -7,7 +7,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackQueryHandler
 from deep_translator import GoogleTranslator
 
-TOKEN = os.environ.get("8318611647:AAEqRT_USD6tBDpmfYCVCQtV4bdpUjRa6Bw") or "8318611647:AAEqRT_USD6tBDpmfYCVCQtV4bdpUjRa6Bw"
+TOKEN = os.environ.get("TOKEN") or "YOUR_BOT_TOKEN"
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -37,8 +37,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS users (
             chat_id INTEGER PRIMARY KEY,
             source_lang TEXT NOT NULL,
-            target_lang TEXT NOT NULL,
-            page INTEGER DEFAULT 0
+            target_lang TEXT NOT NULL
         )
     """)
     conn.commit()
@@ -47,79 +46,46 @@ def init_db():
 def get_user(chat_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT source_lang, target_lang, page FROM users WHERE chat_id = ?", (chat_id,))
+    cursor.execute("SELECT source_lang, target_lang FROM users WHERE chat_id = ?", (chat_id,))
     result = cursor.fetchone()
     conn.close()
     if result:
-        return {"src": result[0], "tgt": result[1], "page": result[2]}
-    return {"src": DEFAULT_SOURCE_LANG, "tgt": DEFAULT_TARGET_LANG, "page": 0}
+        return {"src": result[0], "tgt": result[1]}
+    return {"src": DEFAULT_SOURCE_LANG, "tgt": DEFAULT_TARGET_LANG}
 
-def set_user(chat_id, src, tgt, page):
+def set_user(chat_id, src, tgt):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO users (chat_id, source_lang, target_lang, page)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO users (chat_id, source_lang, target_lang)
+        VALUES (?, ?, ?)
         ON CONFLICT(chat_id) DO UPDATE SET 
             source_lang=excluded.source_lang,
-            target_lang=excluded.target_lang,
-            page=excluded.page
-    """, (chat_id, src, tgt, page))
+            target_lang=excluded.target_lang
+    """, (chat_id, src, tgt))
     conn.commit()
     conn.close()
 
-# --- Barcha tillarni olish ---
-translator = GoogleTranslator(source="auto", target="en")
-LANGS = translator.get_supported_languages(as_dict=True)
-LANG_ITEMS = list(LANGS.items())  # [('english','en'), ('uzbek','uz'), ...]
+# --- Mashhur tillar bayroqlar bilan ---
+LANGS = [
+    ("🇺🇿 Uzbek", "uz"),
+    ("🇬🇧 English", "en"),
+    ("🇷🇺 Russian", "ru"),
+    ("🇸🇦 Arabic", "ar"),
+    ("🇹🇷 Turkish", "tr"),
+    ("🇩🇪 German", "de"),
+]
 
-# Bayroqlar mashhur tillar uchun
-FLAGS = {
-    "ru": "🇷🇺 Russian",
-    "uz": "🇺🇿 Uzbek",
-    "en": "🇬🇧 English",
-    "ar": "🇸🇦 Arabic",
-    "tr": "🇹🇷 Turkish",
-    "de": "🇩🇪 German",
-    "fr": "🇫🇷 French",
-    "es": "🇪🇸 Spanish",
-    "it": "🇮🇹 Italian",
-    "zh-cn": "🇨🇳 Chinese",
-    "ja": "🇯🇵 Japanese",
-    "ko": "🇰🇷 Korean",
-    "hi": "🇮🇳 Hindi"
-}
-
-PAGE_SIZE = 8  # har sahifada 8 til
-
-def build_keyboard(page, mode="src"):
-    start = page * PAGE_SIZE
-    end = start + PAGE_SIZE
-    slice_items = LANG_ITEMS[start:end]
-
-    buttons = []
-    for name, code in slice_items:
-        if code in FLAGS:
-            label = FLAGS[code]
-        else:
-            label = f"{name.title()} ({code})"
-        buttons.append([InlineKeyboardButton(label, callback_data=f"{mode}:{code}")])
-
-    nav = []
-    if page > 0:
-        nav.append(InlineKeyboardButton("⬅️ Oldingi", callback_data=f"page:{mode}:{page-1}"))
-    if end < len(LANG_ITEMS):
-        nav.append(InlineKeyboardButton("➡️ Keyingi", callback_data=f"page:{mode}:{page+1}"))
-    if nav:
-        buttons.append(nav)
-
+def build_keyboard(mode="src"):
+    buttons = [[InlineKeyboardButton(flag, callback_data=f"{mode}:{code}")]
+               for flag, code in LANGS]
     return InlineKeyboardMarkup(buttons)
 
 # --- Bot logic ---
 def start(update, context):
     chat_id = update.effective_chat.id
     user = get_user(chat_id)
-    set_user(chat_id, user["src"], user["tgt"], 0)
+    set_user(chat_id, user["src"], user["tgt"])
 
     msg = (
         "🌍 Translator Bot\n\n"
@@ -127,7 +93,7 @@ def start(update, context):
         "Use the buttons below to set source and target languages.\n\n"
         f"Source: {user['src']} | Target: {user['tgt']}"
     )
-    update.message.reply_text(msg, reply_markup=build_keyboard(user["page"], "src"))
+    update.message.reply_text(msg, reply_markup=build_keyboard("src"))
 
 def translate_message(update, context):
     chat_id = update.effective_chat.id
@@ -151,26 +117,19 @@ def button_handler(update, context):
     user = get_user(chat_id)
     data = query.data
 
-    src, tgt, page = user["src"], user["tgt"], user["page"]
+    src, tgt = user["src"], user["tgt"]
 
     if data.startswith("src:"):
         src = data.split(":")[1]
-        set_user(chat_id, src, tgt, page)
+        set_user(chat_id, src, tgt)
         query.answer(f"Source set: {src}")
-        query.edit_message_text(f"Source: {src} | Target: {tgt}", reply_markup=build_keyboard(page, "tgt"))
+        query.edit_message_text(f"Source: {src} | Target: {tgt}", reply_markup=build_keyboard("tgt"))
 
     elif data.startswith("tgt:"):
         tgt = data.split(":")[1]
-        set_user(chat_id, src, tgt, page)
+        set_user(chat_id, src, tgt)
         query.answer(f"Target set: {tgt}")
         query.edit_message_text(f"Source: {src} | Target: {tgt}")
-
-    elif data.startswith("page:"):
-        _, mode, new_page = data.split(":")
-        new_page = int(new_page)
-        set_user(chat_id, src, tgt, new_page)
-        query.answer("Page switched")
-        query.edit_message_reply_markup(reply_markup=build_keyboard(new_page, mode))
 
     elif data.startswith("copy:"):
         copied_text = data.split("copy:")[1]
