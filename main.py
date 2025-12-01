@@ -7,7 +7,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackQueryHandler
 from deep_translator import GoogleTranslator
 
-TOKEN = os.environ.get("TOKEN") or "YOUR_BOT_TOKEN"
+TOKEN = os.environ.get("8318611647:AAEqRT_USD6tBDpmfYCVCQtV4bdpUjRa6Bw") or "8318611647:AAEqRT_USD6tBDpmfYCVCQtV4bdpUjRa6Bw"
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
